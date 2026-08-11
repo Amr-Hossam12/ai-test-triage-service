@@ -45,7 +45,7 @@ public class OllamaClient {
         try {
             String body = mapper.writeValueAsString(Map.of(
                     "model", chatModel, "prompt", prompt, "stream", false, "format", "json"));
-            JsonNode json = post("/api/generate", body, 60);
+            JsonNode json = post("/api/generate", body, 180);
             return json.get("response").asText();
         } catch (Exception e) {
             throw new RuntimeException("Ollama generate call failed", e);

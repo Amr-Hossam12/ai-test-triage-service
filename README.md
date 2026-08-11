@@ -31,28 +31,109 @@ integrate the same way: send it a `POST /api/triage` request.
    by project, with a click-through detail view showing the full reasoning,
    suggestion, and screenshot.
 
-## Requirements
+## Setup, from scratch
 
-- Java 21+
-- Maven
-- [Ollama](https://ollama.com), running locally, with these two models pulled:
-  ```bash
-  ollama pull llama3.1:8b
-  ollama pull nomic-embed-text
-  ```
+### 1. Install Ollama
 
-## Run it
+Download and install from **[ollama.com](https://ollama.com)** (Windows/Mac/Linux
+installers available there). After installing, Ollama runs as a background
+service/tray app and exposes its API at `http://localhost:11434`.
+
+Verify it's running:
 
 ```bash
+ollama --version
+```
+
+If that hangs or errors, open the Ollama app once, or run any `ollama` command
+(e.g. `ollama list`) — it starts the background server automatically if it isn't
+already running.
+
+### 2. Pull the two required models
+
+```bash
+ollama pull llama3.1:8b
+ollama pull nomic-embed-text
+```
+
+`llama3.1:8b` is the model that does the actual classification/reasoning (~4.9 GB
+download). `nomic-embed-text` is a small embedding model used for retrieval
+(~274 MB). Both run entirely locally — no API key, no data leaves your machine.
+
+Confirm both downloaded correctly:
+
+```bash
+ollama list
+```
+
+You should see both `llama3.1:8b` and `nomic-embed-text` in the output.
+
+### 3. Confirm Ollama's API is actually reachable
+
+```bash
+curl http://localhost:11434/api/tags
+```
+
+This should return JSON listing your installed models. If this fails, the rest
+of this service won't work — fix this first before continuing.
+
+### 4. Install Java 21+ and Maven
+
+Check what you already have:
+
+```bash
+java -version
+mvn -version
+```
+
+If either is missing: get a JDK 21+ build from
+[adoptium.net](https://adoptium.net) (Eclipse Temurin), and Maven from
+[maven.apache.org](https://maven.apache.org/download.cgi). Make sure both are on
+your `PATH` (`java`/`mvn` should run from any terminal) and that `JAVA_HOME`
+points at the JDK.
+
+### 5. Clone and build this repo
+
+```bash
+git clone https://github.com/Amr-Hossam12/ai-test-triage-service.git
+cd ai-test-triage-service
 mvn package
+```
+
+This compiles the service and copies its dependencies into `target/lib/`.
+
+### 6. Run it
+
+```bash
 java -cp "target/classes;target/lib/*" com.aitriage.Main
 ```
 
 (On Linux/macOS, use `:` instead of `;` in the classpath.)
 
-This starts the HTTP server and dashboard on port 8787 by default, and creates a
-`data/` directory (JSONL knowledge base + a `screenshots/` folder) next to wherever
-you run it from.
+You should see console output confirming the dashboard URL, the API URL, and
+which Ollama models it's configured to use. Leave this running in its own
+terminal — it's a server, it doesn't exit on its own.
+
+### 7. Verify it's actually working end-to-end
+
+In a **separate** terminal, with the service still running:
+
+```bash
+curl -X POST http://localhost:8787/api/triage -H "Content-Type: application/json" -d "{\"projectId\":\"smoke-test\",\"testName\":\"manual check\",\"exceptionType\":\"TimeoutException\",\"exceptionMessage\":\"element not found\",\"pageSource\":\"<html><body></body></html>\"}"
+```
+
+This exercises the full pipeline — embedding, retrieval, and the LLM call — and
+should return a JSON object with `classification`, `reasoning`, and `suggestion`
+filled in (it may take several seconds the first time, while Ollama loads the
+model into memory). Then open **http://localhost:8787/** in a browser — that
+same test case should now appear in the dashboard.
+
+If this step works, the service is fully set up. From here, either integrate
+[ai-test-triage-sdk-java](https://github.com/Amr-Hossam12/ai-test-triage-sdk-java)
+into a Cucumber+Selenium project, or point any other tool at
+`POST /api/triage` directly.
+
+### Configuration
 
 Optional system properties, all with sensible defaults:
 

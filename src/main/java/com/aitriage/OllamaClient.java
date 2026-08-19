@@ -25,10 +25,13 @@ public class OllamaClient {
         this.chatModel = chatModel;
     }
 
+    private static final int MAX_ATTEMPTS = 2;
+    private static final long RETRY_BACKOFF_MS = 1000;
+
     public float[] embed(String text) {
         try {
             String body = mapper.writeValueAsString(Map.of("model", embedModel, "prompt", text));
-            JsonNode json = post("/api/embeddings", body, 30);
+            JsonNode json = postWithRetry("/api/embeddings", body, 30);
             JsonNode embeddingNode = json.get("embedding");
             float[] embedding = new float[embeddingNode.size()];
             for (int i = 0; i < embedding.length; i++) {
@@ -45,10 +48,24 @@ public class OllamaClient {
         try {
             String body = mapper.writeValueAsString(Map.of(
                     "model", chatModel, "prompt", prompt, "stream", false, "format", "json"));
-            JsonNode json = post("/api/generate", body, 60);
+            JsonNode json = postWithRetry("/api/generate", body, 180);
             return json.get("response").asText();
         } catch (Exception e) {
             throw new RuntimeException("Ollama generate call failed", e);
+        }
+    }
+
+    /** Retries once on transient I/O failures (connection refused, timeout) - local Ollama inference can be flaky under load. */
+    private JsonNode postWithRetry(String path, String body, int timeoutSeconds) throws Exception {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return post(path, body, timeoutSeconds);
+            } catch (java.io.IOException e) {
+                if (attempt >= MAX_ATTEMPTS) {
+                    throw e;
+                }
+                Thread.sleep(RETRY_BACKOFF_MS);
+            }
         }
     }
 

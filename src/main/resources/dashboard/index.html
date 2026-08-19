@@ -2,90 +2,399 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>AI Test Failure Triage</title>
+<title>TTS Tool Dashboard</title>
+<link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAB+0lEQVR4nO2bYZKDIAyFn85eYnv/s3WPYf+ULpMihJBAQN8/O2rzvYQoDmzopCdw1Jz/ADarWGKZ/UktcElWhqjfVBucStsItZtZg1NpGdF8k97gVK1GiC8eDU4lNWKXXOQNHpDHVG2AR/ggSWzssvEMnhJ3SLAqYDZ4gB9z0YAZ4YM4sYua4ErKGjBz9oNKDKcGrAAflGNJGrASfNAZ090D6A8rZj8oxXZXQHywcvaDKOPPqEBa9Hv8M/xtbTP6TwXMkv0YPnXMUcw6VQ+QwJa0A3NkXxs+ME9VARaawoBc9tWaoFdZwgPA7nn8WzS9WE/gcFsBJXiN7ANOh0AveMCpATlpwgMODbBuelQqcwGtd/Pe8IBCBWi8m7dc1yqTIVAL07PpUZn1AK2MWsIDCgbkAuSYMGLcx1KpAKkJo+EBxSFQa8Kopke1a6654ZowsunFegCbehMsmeAFPsjkKSCF6A0PGD4Ga2FGwANvA6wWIXKhRsAHZvPJ0KjMcvUxwHJtbs6EkdkHOk6HU6AequMrAs/fCDVEK93dB5He+jKg1zr9EUqx3RWQ+nHFKjhjOq2AlUzIsWSHwAomlBjuHlA6YeYq4MTOqoAZTeDGXA3m/U2xNlnVPcBzNUhiEzVBjyZIY7q3zWkFctmNk1SX3TpLddnN02fyun3+BfsTpRNXeaZkAAAAAElFTkSuQmCC">
 <style>
   :root {
-    --bg: #0f1115; --panel: #171a21; --border: #2a2e38; --text: #e6e8ec; --muted: #9aa2b1;
-    --accent: #5b8def;
-  }
-  @media (prefers-color-scheme: light) {
-    :root { --bg: #f5f6f8; --panel: #ffffff; --border: #dfe3ea; --text: #1a1d24; --muted: #5b6472; --accent: #2f6fed; }
+    --vf-red: #e60000;
+    --vf-red-dark: #c50000;
+    --bg: #f5f6f8;
+    --panel: #ffffff;
+    --border: #e5e7eb;
+    --text: #1a1d24;
+    --muted: #6b7280;
+    --sidebar-w: 220px;
   }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
-  header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; }
-  header h1 { font-size: 18px; margin: 0; flex: 1; }
-  select, button { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 13px; }
-  button { cursor: pointer; }
-  button:hover { border-color: var(--accent); }
-  main { display: grid; grid-template-columns: 1fr 1fr; gap: 0; height: calc(100vh - 57px); }
-  #list { overflow-y: auto; border-right: 1px solid var(--border); }
-  #detail { overflow-y: auto; padding: 20px; }
+  a { color: inherit; }
+
+  #shell { display: grid; grid-template-columns: var(--sidebar-w) 1fr; min-height: 100vh; }
+
+  /* Sidebar */
+  #sidebar { background: var(--vf-red); color: #fff; padding: 20px 16px; display: flex; flex-direction: column; gap: 24px; }
+  .logo { display: flex; align-items: center; }
+  .vf-logo-img { width: 100%; max-width: 170px; height: auto; display: block; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; background: rgba(255,255,255,0.16); }
+  .stat-nav { display: flex; flex-direction: column; gap: 8px; }
+  .stat-nav-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 8px; font-size: 12px; background: rgba(255,255,255,0.08); cursor: pointer; border: 1px solid transparent; }
+  .stat-nav-item:hover { background: rgba(255,255,255,0.16); }
+  .stat-nav-item.active { background: #ffffff; color: var(--vf-red); border-color: #ffffff; }
+  .stat-nav-item.active .count { color: var(--vf-red); }
+  .stat-nav-item .dot-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
+  .stat-nav-item .count { font-weight: 700; }
+  .sidebar-footer { margin-top: auto; font-size: 11px; opacity: 0.75; }
+
+  /* Main */
+  #main { display: flex; flex-direction: column; min-height: 100vh; }
+  #topbar { background: var(--panel); border-bottom: 1px solid var(--border); padding: 16px 28px; display: flex; align-items: center; gap: 16px; }
+  #topbar h1 { font-size: 18px; margin: 0; flex: 1; }
+  button, input[type=text], .custom-select-btn { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+  button { cursor: pointer; font-weight: 600; }
+  button#refreshBtn { background: var(--vf-red); color: #fff; border-color: var(--vf-red); }
+  button#refreshBtn:hover { background: var(--vf-red-dark); border-color: var(--vf-red-dark); }
+  input:hover { border-color: var(--vf-red); }
+  .custom-select { position: relative; }
+  .custom-select-btn {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    min-width: 170px; font-weight: 600; cursor: pointer; padding: 9px 12px 9px 14px;
+  }
+  .custom-select-btn:hover, .custom-select-btn.open { border-color: var(--vf-red); }
+  .custom-select-btn .chevron { border: solid var(--muted); border-width: 0 2px 2px 0; padding: 3px; transform: rotate(45deg); transition: transform 0.15s; }
+  .custom-select-btn.open .chevron { transform: rotate(-135deg); }
+  .custom-select-menu {
+    display: none; position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 20;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12); padding: 4px; max-height: 260px; overflow-y: auto;
+  }
+  .custom-select-menu.open { display: block; }
+  .custom-select-option { padding: 8px 12px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+  .custom-select-option:hover { background: #fdecec; color: var(--vf-red); }
+  .custom-select-option.selected { background: #fdecec; color: var(--vf-red); font-weight: 700; }
+
+  #content { padding: 24px 28px; flex: 1; }
+
+  /* Stat cards */
+  #stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .stat-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 6px; }
+  .stat-card .stat-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+  .stat-card .stat-value { font-size: 24px; font-weight: 800; }
+  .stat-card .stat-label { font-size: 12px; color: var(--muted); }
+
+  /* Panels */
+  #panels { display: grid; grid-template-columns: 1.1fr 1fr; gap: 20px; align-items: start; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .panel-header { padding: 14px 18px; border-bottom: 1px solid var(--border); font-size: 14px; font-weight: 700; }
+  #list-body { max-height: 640px; overflow-y: auto; }
   table { width: 100%; border-collapse: collapse; }
-  th { text-align: left; padding: 10px 14px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); }
-  td { padding: 10px 14px; font-size: 13px; border-bottom: 1px solid var(--border); cursor: pointer; }
-  tr:hover td { background: var(--panel); }
-  tr.selected td { background: var(--panel); }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
-  .badge-SITE_RENDERING_ISSUE { background: #3a2f0f; color: #e0b84a; }
-  .badge-UI_OVERLAY_BLOCKING { background: #1f3a2f; color: #4ae08a; }
-  .badge-ASSERTION_MISMATCH { background: #2f2a3a; color: #b199e0; }
-  .badge-LOCATOR_BROKEN { background: #3a1f2a; color: #e04a8a; }
-  .badge-UNKNOWN { background: #2a2e38; color: var(--muted); }
+  th { text-align: left; padding: 10px 18px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--panel); }
+  td { padding: 12px 18px; font-size: 13px; border-bottom: 1px solid var(--border); cursor: pointer; }
+  tr:hover td { background: #fbfbfc; }
+  tr.selected td { background: #fdecec; }
+
+  .badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .badge-SITE_RENDERING_ISSUE { background: #f3e8ff; color: #7c3aed; }
+  .badge-UI_OVERLAY_BLOCKING { background: #fff4e5; color: #b45309; }
+  .badge-ASSERTION_MISMATCH { background: #e8f0fe; color: #1d4ed8; }
+  .badge-LOCATOR_BROKEN { background: #fde8e8; color: #c81e1e; }
+  .badge-UNKNOWN { background: #f1f2f4; color: #6b7280; }
+
   .muted { color: var(--muted); }
-  h2 { font-size: 16px; margin: 0 0 4px; }
+  #detail { padding: 20px; max-height: 680px; overflow-y: auto; }
+  #detail h2 { font-size: 16px; margin: 0 0 4px; }
   .section { margin-bottom: 18px; }
-  .section h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 6px; }
-  pre { white-space: pre-wrap; word-break: break-word; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 12px; max-height: 220px; overflow: auto; }
-  img { max-width: 100%; border: 1px solid var(--border); border-radius: 6px; }
-  .empty { padding: 40px; text-align: center; color: var(--muted); }
+  .section h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 8px; }
+  pre { white-space: pre-wrap; word-break: break-word; background: #f9fafb; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 12px; max-height: 220px; overflow: auto; }
+  #detail img { max-width: 100%; border: 1px solid var(--border); border-radius: 8px; }
+  .empty { padding: 60px 20px; text-align: center; color: var(--muted); }
+
+  .verified-check { color: #1a7f4b; font-weight: 700; margin-left: 6px; }
+  .verified-badge { display: inline-flex; align-items: center; gap: 6px; background: #e6f7ec; color: #1a7f4b; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; margin-bottom: 10px; }
+  .verify-hint { margin: 0 0 8px; }
+  .verify-row { display: flex; gap: 8px; align-items: center; }
+  .verify-select { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+  .verify-select:hover, .verify-select:focus { border-color: var(--vf-red); outline: none; }
+  .verify-btn { background: var(--vf-red); color: #fff; border: 1px solid var(--vf-red); border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .verify-btn:hover { background: var(--vf-red-dark); border-color: var(--vf-red-dark); }
+  .verify-btn:disabled { opacity: 0.6; cursor: default; }
+
+  /* Similar case references */
+  .ref-list { display: flex; flex-direction: column; gap: 8px; }
+  .ref-item { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; cursor: pointer; }
+  .ref-item:hover { border-color: var(--vf-red); background: #fdecec; }
+  .ref-item-main { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .ref-name { font-size: 13px; font-weight: 600; }
+  .ref-item-meta { font-size: 11px; color: var(--muted); }
+
+  /* Metrics panel */
+  #metricsPanel { margin-bottom: 20px; }
+  .metrics-summary { display: flex; gap: 28px; padding: 16px 18px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .metrics-summary-item .metrics-value { font-size: 22px; font-weight: 800; }
+  .metrics-summary-item .metrics-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .metrics-table { width: 100%; border-collapse: collapse; }
+  .metrics-table th { text-align: left; padding: 8px 18px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); border-bottom: 1px solid var(--border); }
+  .metrics-table td { padding: 10px 18px; font-size: 13px; border-bottom: 1px solid var(--border); }
+  .accuracy-bar-wrap { display: flex; align-items: center; gap: 8px; min-width: 140px; }
+  .accuracy-bar-track { flex: 1; background: #f1f2f4; border-radius: 999px; height: 6px; overflow: hidden; }
+  .accuracy-bar-fill { height: 100%; border-radius: 999px; }
+  .metrics-empty { padding: 16px 18px; color: var(--muted); font-size: 13px; }
 </style>
 </head>
 <body>
-<header>
-  <h1>AI Test Failure Triage</h1>
-  <select id="projectFilter"><option value="">All projects</option></select>
-  <button id="refreshBtn">Refresh</button>
-</header>
-<main>
-  <div id="list"><table><thead><tr><th>Time</th><th>Project</th><th>Test</th><th>Classification</th></tr></thead><tbody id="tbody"></tbody></table></div>
-  <div id="detail"><div class="empty">Select a failure to view its analysis</div></div>
-</main>
+<div id="shell">
+  <aside id="sidebar">
+    <div class="logo"><img src="data:image/png;base64,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" alt="Vodafone" class="vf-logo-img"></div>
+    <div class="nav-item">AI Test Failure Triage</div>
+    <div class="stat-nav" id="queueNav"></div>
+    <div class="stat-nav" id="statNav"></div>
+    <div class="sidebar-footer">Internal QA Tooling</div>
+  </aside>
+
+  <div id="main">
+    <header id="topbar">
+      <h1>Failure Triage Dashboard</h1>
+      <div class="custom-select" id="projectFilterWrap">
+        <button type="button" class="custom-select-btn" id="projectFilterBtn">
+          <span id="projectFilterLabel">All projects</span>
+          <span class="chevron"></span>
+        </button>
+        <div class="custom-select-menu" id="projectFilterMenu"></div>
+      </div>
+      <button id="refreshBtn">Refresh</button>
+    </header>
+
+    <div id="content">
+      <div id="stats"></div>
+
+      <div class="panel" id="metricsPanel">
+        <div class="panel-header">Model Accuracy (human-verified)</div>
+        <div id="metricsBody"></div>
+      </div>
+
+      <div id="panels">
+        <div class="panel">
+          <div class="panel-header">Recent Failures</div>
+          <div id="list-body">
+            <table><thead><tr><th>Time</th><th>Project</th><th>Test</th><th>Classification</th></tr></thead><tbody id="tbody"></tbody></table>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">Diagnosis</div>
+          <div id="detail"><div class="empty">Select a failure to view its analysis</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
+const CATEGORIES = ["LOCATOR_BROKEN", "UI_OVERLAY_BLOCKING", "SITE_RENDERING_ISSUE", "ASSERTION_MISMATCH", "UNKNOWN"];
+const CATEGORY_COLORS = {
+  LOCATOR_BROKEN: "#c81e1e",
+  UI_OVERLAY_BLOCKING: "#b45309",
+  SITE_RENDERING_ISSUE: "#7c3aed",
+  ASSERTION_MISMATCH: "#1d4ed8",
+  UNKNOWN: "#6b7280"
+};
+const CATEGORY_LABELS = {
+  LOCATOR_BROKEN: "Locator Broken",
+  UI_OVERLAY_BLOCKING: "Overlay Blocking",
+  SITE_RENDERING_ISSUE: "Rendering Issue",
+  ASSERTION_MISMATCH: "Assertion Mismatch",
+  UNKNOWN: "Unknown"
+};
+
 let cases = [];
 let selectedId = null;
+let classificationFilter = null;
+let queueMode = false;
+
+let currentProjectId = '';
 
 async function load() {
-  const projectId = document.getElementById('projectFilter').value;
-  const url = '/api/failures' + (projectId ? ('?projectId=' + encodeURIComponent(projectId)) : '');
+  const url = '/api/failures' + (currentProjectId ? ('?projectId=' + encodeURIComponent(currentProjectId)) : '');
   const res = await fetch(url);
   cases = await res.json();
 
-  const projects = [...new Set(cases.map(c => c.projectId))];
-  const filterEl = document.getElementById('projectFilter');
-  const current = filterEl.value;
-  filterEl.innerHTML = '<option value="">All projects</option>' +
-    projects.map(p => `<option value="${p}">${p}</option>`).join('');
-  filterEl.value = current;
+  renderProjectMenu();
+  renderStats();
+  renderQueueNav();
+  renderStatNav();
+  renderList();
+  loadMetrics();
+}
 
+function renderQueueNav() {
+  const unverifiedCount = cases.filter(c => !c.verified).length;
+  document.getElementById('queueNav').innerHTML = `
+    <div class="stat-nav-item ${queueMode ? 'active' : ''}" id="queueNavItem">
+      <span><span class="dot-swatch" style="background:#ffffff;border:1px solid rgba(255,255,255,0.5);"></span>Review Queue</span>
+      <span class="count">${unverifiedCount}</span>
+    </div>`;
+  document.getElementById('queueNavItem').addEventListener('click', () => {
+    queueMode = !queueMode;
+    renderQueueNav();
+    renderList();
+  });
+}
+
+async function loadMetrics() {
+  const url = '/api/metrics' + (currentProjectId ? ('?projectId=' + encodeURIComponent(currentProjectId)) : '');
+  const res = await fetch(url);
+  const metrics = await res.json();
+  renderMetrics(metrics);
+}
+
+function renderMetrics(m) {
+  const body = document.getElementById('metricsBody');
+  if (!m.verifiedCases) {
+    body.innerHTML = '<div class="metrics-empty">No verified cases yet. Confirm or correct a diagnosis to start tracking model accuracy.</div>';
+    return;
+  }
+
+  const overallPct = Math.round(m.accuracy * 100);
+  const summary = `
+    <div class="metrics-summary">
+      <div class="metrics-summary-item">
+        <div class="metrics-value">${overallPct}%</div>
+        <div class="metrics-label">Overall accuracy</div>
+      </div>
+      <div class="metrics-summary-item">
+        <div class="metrics-value">${m.verifiedCases}</div>
+        <div class="metrics-label">Cases verified</div>
+      </div>
+      <div class="metrics-summary-item">
+        <div class="metrics-value">${m.corrected}</div>
+        <div class="metrics-label">Corrections made</div>
+      </div>
+      <div class="metrics-summary-item">
+        <div class="metrics-value">${m.totalCases}</div>
+        <div class="metrics-label">Total cases</div>
+      </div>
+    </div>`;
+
+  const rows = CATEGORIES.map(cat => {
+    const s = m.byCategory[cat] || { predicted: 0, verified: 0, confirmed: 0, corrected: 0, accuracy: null };
+    const pct = s.accuracy === null ? null : Math.round(s.accuracy * 100);
+    const barColor = pct === null ? '#d1d5db' : (pct >= 80 ? '#1a7f4b' : pct >= 50 ? '#b45309' : '#c81e1e');
+    const accuracyCell = pct === null
+      ? '<span class="muted">No verifications yet</span>'
+      : `<div class="accuracy-bar-wrap">
+           <div class="accuracy-bar-track"><div class="accuracy-bar-fill" style="width:${pct}%; background:${barColor};"></div></div>
+           <span>${pct}% (${s.confirmed}/${s.verified})</span>
+         </div>`;
+    return `
+      <tr>
+        <td><span class="badge badge-${cat}">${CATEGORY_LABELS[cat]}</span></td>
+        <td>${s.predicted}</td>
+        <td>${s.verified}</td>
+        <td>${s.corrected}</td>
+        <td>${accuracyCell}</td>
+      </tr>`;
+  }).join('');
+
+  body.innerHTML = summary + `
+    <table class="metrics-table">
+      <thead><tr><th>Category</th><th>AI Predicted</th><th>Verified</th><th>Corrected</th><th>Accuracy</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderProjectMenu() {
+  const projects = [...new Set(cases.map(c => c.projectId))];
+  const options = [{ id: '', label: 'All projects' }, ...projects.map(p => ({ id: p, label: p }))];
+
+  const menu = document.getElementById('projectFilterMenu');
+  menu.innerHTML = options.map(o => `
+    <div class="custom-select-option ${o.id === currentProjectId ? 'selected' : ''}" data-project-id="${escapeHtml(o.id)}">
+      ${escapeHtml(o.label)}
+    </div>`).join('');
+
+  menu.querySelectorAll('.custom-select-option').forEach(el => {
+    el.addEventListener('click', () => {
+      currentProjectId = el.dataset.projectId;
+      document.getElementById('projectFilterLabel').textContent = el.textContent.trim();
+      closeProjectMenu();
+      load();
+    });
+  });
+
+  const selected = options.find(o => o.id === currentProjectId);
+  document.getElementById('projectFilterLabel').textContent = selected ? selected.label : 'All projects';
+}
+
+function closeProjectMenu() {
+  document.getElementById('projectFilterMenu').classList.remove('open');
+  document.getElementById('projectFilterBtn').classList.remove('open');
+}
+
+function renderList() {
+  let visible = classificationFilter ? cases.filter(c => c.classification === classificationFilter) : cases;
+  if (queueMode) {
+    visible = visible.filter(c => !c.verified)
+      .slice()
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  }
+
+  const header = document.querySelector('#panels .panel:first-child .panel-header');
+  const parts = [];
+  if (queueMode) parts.push('Review Queue (oldest unverified first)');
+  if (classificationFilter) parts.push(CATEGORY_LABELS[classificationFilter]);
+  header.textContent = parts.length ? `Recent Failures — ${parts.join(' — ')}` : 'Recent Failures';
+
+  if (visible.length === 0) {
+    const message = cases.length === 0
+      ? 'No failures recorded yet'
+      : (queueMode ? 'Nothing left to review - all caught up' : 'No failures match this filter');
+    document.getElementById('list-body').innerHTML = `<div class="empty">${message}</div>`;
+    return;
+  }
+
+  document.getElementById('list-body').innerHTML =
+    '<table><thead><tr><th>Time</th><th>Project</th><th>Test</th><th>Classification</th></tr></thead><tbody id="tbody"></tbody></table>';
   const tbody = document.getElementById('tbody');
-  tbody.innerHTML = cases.map(c => `
+  tbody.innerHTML = visible.map(c => `
     <tr data-id="${c.id}" class="${c.id === selectedId ? 'selected' : ''}">
       <td class="muted">${new Date(c.timestamp).toLocaleString()}</td>
-      <td>${c.projectId}</td>
+      <td>${escapeHtml(c.projectId)}</td>
       <td>${escapeHtml(c.testName)}</td>
-      <td><span class="badge badge-${c.classification}">${c.classification}</span></td>
-    </tr>`).join('') || '';
-
-  if (cases.length === 0) {
-    tbody.innerHTML = '';
-    document.getElementById('list').querySelector('table').style.display = 'none';
-  } else {
-    document.getElementById('list').querySelector('table').style.display = '';
-  }
+      <td><span class="badge badge-${c.classification}">${c.classification}</span>${c.verified ? '<span class="verified-check" title="Human verified">&#10003;</span>' : ''}</td>
+    </tr>`).join('');
 
   tbody.querySelectorAll('tr').forEach(tr => {
     tr.addEventListener('click', () => selectCase(tr.dataset.id));
+  });
+}
+
+function renderStats() {
+  const total = cases.length;
+  const counts = Object.fromEntries(CATEGORIES.map(cat => [cat, cases.filter(c => c.classification === cat).length]));
+
+  const cards = [`
+    <div class="stat-card">
+      <div class="stat-icon" style="background:#fdecec;color:var(--vf-red);">&#8721;</div>
+      <div class="stat-value">${total}</div>
+      <div class="stat-label">Total Failures</div>
+    </div>`];
+
+  for (const cat of CATEGORIES) {
+    const color = CATEGORY_COLORS[cat];
+    cards.push(`
+      <div class="stat-card">
+        <div class="stat-icon" style="background:${color}1a;color:${color};">&#9679;</div>
+        <div class="stat-value">${counts[cat]}</div>
+        <div class="stat-label">${CATEGORY_LABELS[cat]}</div>
+      </div>`);
+  }
+
+  document.getElementById('stats').innerHTML = cards.join('');
+}
+
+function renderStatNav() {
+  const counts = Object.fromEntries(CATEGORIES.map(cat => [cat, cases.filter(c => c.classification === cat).length]));
+  document.getElementById('statNav').innerHTML = CATEGORIES.map(cat => `
+    <div class="stat-nav-item ${cat === classificationFilter ? 'active' : ''}" data-classification="${cat}">
+      <span><span class="dot-swatch" style="background:${CATEGORY_COLORS[cat]};"></span>${CATEGORY_LABELS[cat]}</span>
+      <span class="count">${counts[cat]}</span>
+    </div>`).join('');
+
+  document.querySelectorAll('.stat-nav-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const cat = el.dataset.classification;
+      classificationFilter = classificationFilter === cat ? null : cat;
+      renderStatNav();
+      renderList();
+    });
   });
 }
 
@@ -98,10 +407,21 @@ function selectCase(id) {
 
   detail.innerHTML = `
     <h2>${escapeHtml(c.testName)}</h2>
-    <p class="muted">${c.projectId} &middot; ${new Date(c.timestamp).toLocaleString()}</p>
+    <p class="muted">${escapeHtml(c.projectId)} &middot; ${new Date(c.timestamp).toLocaleString()}</p>
     <div class="section">
       <h3>Classification</h3>
       <span class="badge badge-${c.classification}">${c.classification}</span>
+    </div>
+    <div class="section">
+      <h3>Human Verification</h3>
+      ${c.verified ? `<div class="verified-badge">&#10003; Verified as ${CATEGORY_LABELS[c.verifiedClassification] || c.verifiedClassification}</div>` : ''}
+      <p class="muted verify-hint">${c.verified ? 'Change the confirmed classification if needed:' : "Confirm or correct the AI's classification so future diagnoses learn from this case:"}</p>
+      <div class="verify-row">
+        <select class="verify-select" id="verifySelect">
+          ${CATEGORIES.map(cat => `<option value="${cat}" ${cat === (c.verified ? c.verifiedClassification : c.classification) ? 'selected' : ''}>${CATEGORY_LABELS[cat]}</option>`).join('')}
+        </select>
+        <button class="verify-btn" id="verifyBtn">${c.verified ? 'Update' : 'Confirm'}</button>
+      </div>
     </div>
     <div class="section">
       <h3>Exception</h3>
@@ -111,6 +431,23 @@ function selectCase(id) {
       <h3>Reasoning</h3>
       <pre>${escapeHtml(c.reasoning)}</pre>
     </div>
+    ${c.similarCases && c.similarCases.length ? `
+    <div class="section">
+      <h3>Similar Past Incidents Used</h3>
+      <div class="ref-list">
+        ${c.similarCases.map(ref => `
+          <div class="ref-item" data-ref-id="${ref.id}">
+            <div class="ref-item-main">
+              <span class="badge badge-${ref.classification}">${CATEGORY_LABELS[ref.classification] || ref.classification}</span>
+              ${ref.verified ? '<span class="verified-check" title="Human verified">&#10003;</span>' : ''}
+              <span class="ref-name">${escapeHtml(ref.testName)}</span>
+            </div>
+            <div class="ref-item-meta">
+              Case ${ref.id.slice(0, 8)}${ref.crossProject ? ` &middot; from project "${escapeHtml(ref.projectId)}"` : ''}
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>` : ''}
     <div class="section">
       <h3>Suggested next step</h3>
       <pre>${escapeHtml(c.suggestion)}</pre>
@@ -121,6 +458,49 @@ function selectCase(id) {
       <pre>${escapeHtml(c.pageSourceSnippet)}</pre>
     </div>
   `;
+
+  document.getElementById('verifyBtn').addEventListener('click', () => verifyCase(c.id));
+  detail.querySelectorAll('.ref-item').forEach(el => {
+    el.addEventListener('click', () => viewReferenceCase(el.dataset.refId));
+  });
+}
+
+async function viewReferenceCase(id) {
+  let c = cases.find(x => x.id === id);
+  if (!c) {
+    const res = await fetch(`/api/failures/${encodeURIComponent(id)}`);
+    if (!res.ok) {
+      alert('That case could not be loaded (it may have been removed).');
+      return;
+    }
+    c = await res.json();
+    cases.push(c);
+  }
+  selectCase(id);
+}
+
+async function verifyCase(id) {
+  const select = document.getElementById('verifySelect');
+  const btn = document.getElementById('verifyBtn');
+  const classification = select.value;
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  try {
+    const res = await fetch(`/api/failures/${encodeURIComponent(id)}/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ classification })
+    });
+    if (!res.ok) {
+      throw new Error('Server returned ' + res.status);
+    }
+    await load();
+    selectCase(id);
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Confirm';
+    alert('Failed to save verification: ' + e.message);
+  }
 }
 
 function escapeHtml(s) {
@@ -128,7 +508,17 @@ function escapeHtml(s) {
 }
 
 document.getElementById('refreshBtn').addEventListener('click', load);
-document.getElementById('projectFilter').addEventListener('change', load);
+
+document.getElementById('projectFilterBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  document.getElementById('projectFilterMenu').classList.toggle('open');
+  document.getElementById('projectFilterBtn').classList.toggle('open');
+});
+document.addEventListener('click', (e) => {
+  if (!document.getElementById('projectFilterWrap').contains(e.target)) {
+    closeProjectMenu();
+  }
+});
 load();
 </script>
 </body>

@@ -44,6 +44,7 @@ public class TriageHandler implements HttpHandler {
             response.put("classification", result.classification);
             response.put("reasoning", result.reasoning);
             response.put("suggestion", result.suggestion);
+            response.put("similarCases", result.similarCases);
             Http.sendJson(exchange, 200, response);
         } catch (Exception e) {
             Http.sendJson(exchange, 500, Map.of("error", e.getMessage()));

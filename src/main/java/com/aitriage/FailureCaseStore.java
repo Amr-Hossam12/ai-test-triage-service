@@ -60,14 +60,77 @@ public class FailureCaseStore {
     }
 
     public List<FailureCase> findSimilar(String projectId, float[] queryEmbedding, int topK) {
-        List<FailureCase> sorted = new ArrayList<>();
-        for (FailureCase c : cases) {
-            if (c.projectId.equals(projectId)) {
-                sorted.add(c);
-            }
+        return findSimilar(projectId, queryEmbedding, topK, -1.0);
+    }
+
+    /**
+     * Only past incidents at or above minSimilarity are returned, so weakly-related history doesn't
+     * dilute the prompt. Human-verified cases are preferred over unverified AI guesses at the same
+     * relevance, so a corrected classification starts grounding future diagnoses immediately instead
+     * of an unverified (possibly wrong) one being retrieved just as readily.
+     * <p>
+     * If nothing in the current project clears minSimilarity, falls back to a search across all
+     * other projects - a brand-new project should still benefit from a pattern (e.g. a cookie-banner
+     * overlay) another project has already seen and had confirmed by a human, instead of starting
+     * every classification cold. An established project with real in-project history never triggers
+     * this fallback. The fallback only considers human-verified cases from other projects - an
+     * unverified AI guess borrowed cross-project would compound uncertainty on two axes at once.
+     */
+    public List<FailureCase> findSimilar(String projectId, float[] queryEmbedding, int topK, double minSimilarity) {
+        List<FailureCase> result = findSimilarWithin(c -> c.projectId.equals(projectId), queryEmbedding, topK, minSimilarity);
+        if (!result.isEmpty()) {
+            return result;
         }
-        sorted.sort(Comparator.comparingDouble((FailureCase c) -> cosineSimilarity(c.embedding, queryEmbedding)).reversed());
-        return sorted.subList(0, Math.min(topK, sorted.size()));
+        return findSimilarWithin(c -> !c.projectId.equals(projectId) && c.verified, queryEmbedding, topK, minSimilarity);
+    }
+
+    private List<FailureCase> findSimilarWithin(java.util.function.Predicate<FailureCase> scope,
+                                                 float[] queryEmbedding, int topK, double minSimilarity) {
+        List<FailureCase> verified = new ArrayList<>();
+        List<FailureCase> unverified = new ArrayList<>();
+        for (FailureCase c : cases) {
+            if (!scope.test(c) || cosineSimilarity(c.embedding, queryEmbedding) < minSimilarity) {
+                continue;
+            }
+            (c.verified ? verified : unverified).add(c);
+        }
+        Comparator<FailureCase> bySimilarityDesc =
+                Comparator.comparingDouble((FailureCase c) -> cosineSimilarity(c.embedding, queryEmbedding)).reversed();
+        verified.sort(bySimilarityDesc);
+        unverified.sort(bySimilarityDesc);
+
+        List<FailureCase> result = new ArrayList<>(verified.subList(0, Math.min(topK, verified.size())));
+        if (result.size() < topK) {
+            int remaining = topK - result.size();
+            result.addAll(unverified.subList(0, Math.min(remaining, unverified.size())));
+        }
+        return result;
+    }
+
+    /** Records a human confirmation/correction of a case's classification, used to ground future diagnoses. */
+    public synchronized boolean verify(String id, String verifiedClassification) {
+        Optional<FailureCase> found = cases.stream().filter(c -> c.id.equals(id)).findFirst();
+        if (found.isEmpty()) {
+            return false;
+        }
+        FailureCase c = found.get();
+        c.verified = true;
+        c.verifiedClassification = verifiedClassification;
+        rewriteFile();
+        return true;
+    }
+
+    private void rewriteFile() {
+        try {
+            StringBuilder sb = new StringBuilder();
+            for (FailureCase c : cases) {
+                sb.append(mapper.writeValueAsString(c)).append(System.lineSeparator());
+            }
+            Files.writeString(file.toPath(), sb.toString(),
+                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to rewrite failure case store: " + file, e);
+        }
     }
 
     public List<FailureCase> listAll(String projectIdFilter) {

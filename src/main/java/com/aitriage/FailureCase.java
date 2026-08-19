@@ -1,6 +1,7 @@
 package com.aitriage;
 
 import java.time.Instant;
+import java.util.List;
 
 /** A single triaged test failure, stored in the flat-file case store. */
 public class FailureCase {
@@ -17,6 +18,9 @@ public class FailureCase {
     public String classification;
     public String reasoning;
     public String suggestion;
+    public boolean verified;
+    public String verifiedClassification;
+    public List<SimilarCaseRef> similarCases;
 
     public FailureCase() {
     }

@@ -18,18 +18,43 @@ integrate the same way: send it a `POST /api/triage` request.
    against past incidents from the *same project* (`projectId`-scoped, so unrelated
    projects don't contaminate each other's context). No vector database — at the
    realistic scale of one project's failure history (dozens to hundreds of
-   incidents), a linear in-memory scan is simpler and just as fast.
+   incidents), a linear in-memory scan is simpler and just as fast. Human-verified
+   cases are preferred over unverified AI guesses at equal similarity. **If nothing
+   in the current project clears the similarity threshold, retrieval falls back to
+   a search across all *other* projects — but only considers cases another human
+   has already verified there**, so a brand-new project isn't starting from zero
+   grounding, without risking an unverified guess from one project corrupting
+   another's diagnoses.
 2. **Generation** — the current evidence plus the most similar past incidents get
    sent to a local LLM (`llama3.1:8b` via Ollama) using JSON-mode, constrained to
    return a classification (one of 5 fixed categories), a reasoning explanation,
-   and a suggested next step. The classification is validated against the allowed
-   set — malformed output falls back to `UNKNOWN` rather than corrupting the store.
-3. **Storage** — every triaged case (with its screenshot, if one was sent) is
-   appended to the knowledge base, so it's available as grounding context for the
-   next failure, even seconds later.
-4. **Dashboard** — a single self-contained HTML page lists every case, filterable
-   by project, with a click-through detail view showing the full reasoning,
-   suggestion, and screenshot.
+   and a suggested next step. Each retrieved past incident is tagged with a short
+   `[Case xxxxxxxx]` id and labeled human-confirmed vs. unconfirmed vs.
+   cross-project, and the model is asked to cite that tag in its reasoning if it
+   relied on it. The classification is validated against the allowed set —
+   malformed output falls back to `UNKNOWN` rather than corrupting the store.
+3. **Storage** — every triaged case (with its screenshot, if one was sent, and the
+   list of past cases that grounded its diagnosis) is appended to the knowledge
+   base, so it's available as grounding context for the next failure, even seconds
+   later.
+4. **Human verification (feedback loop)** — a person can confirm or correct any
+   case's classification (`POST /api/failures/{id}/verify`). This is what step 1's
+   "human-verified" preference and step 2's "human-confirmed" labeling actually
+   draw on — corrections made today change tomorrow's diagnosis for the same
+   failure pattern, including across projects. Verification is manual, not
+   automatic: an unverified wrong classification will keep being treated as an
+   "unconfirmed AI guess" (lower trust, but not excluded) until someone reviews it
+   from the dashboard's Review Queue.
+5. **Notifications** — after every diagnosis, a pluggable notifier chain fires
+   (console logging always on; a Slack webhook opt-in via
+   `-Dtriage.slackWebhookUrl=...`, no code changes needed to enable it later).
+6. **Dashboard** — a single self-contained HTML page lists every case, filterable
+   by project or classification, with: a Model Accuracy panel (confirm/correct
+   rate per category, computed from real human verifications); a Review Queue
+   (unverified cases, oldest first); and a click-through detail view showing the
+   full reasoning, suggestion, screenshot, the human-verification control, and a
+   clickable "Similar Past Incidents Used" list that jumps straight to whatever
+   case(s) grounded that diagnosis — even one from a different project.
 
 ## Setup, from scratch
 
@@ -144,12 +169,26 @@ Optional system properties, all with sensible defaults:
 | `-Dtriage.ollamaBaseUrl`  | `http://localhost:11434`   | Ollama's API URL                      |
 | `-Dtriage.embedModel`     | `nomic-embed-text`         | Embedding model                       |
 | `-Dtriage.chatModel`      | `llama3.1:8b`              | Generation model                      |
+| `-Dtriage.slackWebhookUrl`| unset                       | If set, also posts each diagnosis to this Slack incoming webhook |
 
 ## Dashboard
 
-Open **http://localhost:8787/** in a browser — lists every triaged failure with a
-color-coded classification badge, click any row for the full detail (reasoning,
-suggestion, screenshot).
+Open **http://localhost:8787/** in a browser:
+
+- **Stat cards** — total failures and a count per classification.
+- **Model Accuracy panel** — overall and per-category confirm/correct rate,
+  computed from real human verifications (empty until at least one case has
+  been verified).
+- **Review Queue** — a sidebar filter showing only unverified cases, oldest
+  first, so nothing sits unreviewed indefinitely.
+- **Case table** — every triaged failure with a color-coded classification
+  badge and a checkmark on any case a human has verified; click a row for the
+  full detail (reasoning, suggestion, screenshot).
+- **Detail panel** — includes a Confirm/Update control to record a human
+  verification, and a "Similar Past Incidents Used" list — the actual cases
+  that grounded this diagnosis, each clickable to jump straight to that case
+  (even one from a different project, fetched on demand if it isn't already
+  loaded).
 
 ## API
 
@@ -169,21 +208,40 @@ suggestion, screenshot).
 Returns:
 
 ```json
-{ "id": "...", "classification": "...", "reasoning": "...", "suggestion": "..." }
+{
+  "id": "...",
+  "classification": "...",
+  "reasoning": "...",
+  "suggestion": "...",
+  "similarCases": [
+    { "id": "...", "projectId": "...", "testName": "...", "classification": "...",
+      "verified": true, "crossProject": false }
+  ]
+}
 ```
 
 **`GET /api/failures?projectId=`** — list all triaged cases, optionally filtered by project.
 
 **`GET /api/failures/{id}`** — full detail for one case.
 
+**`POST /api/failures/{id}/verify`** — record a human confirmation/correction:
+
+```json
+{ "classification": "LOCATOR_BROKEN" }
+```
+
+**`GET /api/metrics?projectId=`** — aggregate accuracy stats (overall and per
+category) computed from verified cases only.
+
 **`GET /api/screenshots/{id}`** — raw PNG, if that case had one.
 
 ## Known limitations
 
-- **No human-confirm gate before a diagnosis joins the knowledge base.** Every
-  classification, right or wrong, is persisted immediately and becomes retrieval
-  context for future failures. A wrong early diagnosis can bias later ones toward
-  the same mistake.
+- **Human verification is manual, not automatic.** A wrong AI classification is
+  labeled "unconfirmed" and weighted lower in retrieval, but it isn't blocked
+  from grounding future diagnoses until a person actually reviews it from the
+  Review Queue. The system narrows the blast radius of a wrong guess; it doesn't
+  eliminate it on its own.
 - **The 5-category classification taxonomy is fixed** (`SITE_RENDERING_ISSUE`,
   `UI_OVERLAY_BLOCKING`, `ASSERTION_MISMATCH`, `LOCATOR_BROKEN`, `UNKNOWN`) and was
   defined before any real failure data existed — some real failures (timing/race
@@ -192,3 +250,7 @@ Returns:
 - **Page-source evidence is truncated to the first 1500 characters** of whatever
   string is sent — for a real page, that's often just `<head>` boilerplate. Sending
   a more targeted excerpt (e.g. around the failing element) produces better results.
+- **Cross-project retrieval fallback only ever considers human-verified cases**
+  from other projects, by design — but that also means a brand-new project with
+  no verified history anywhere yet still gets no grounding at all until at least
+  one case, somewhere, has been reviewed by a person.

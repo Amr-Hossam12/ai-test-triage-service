@@ -93,6 +93,9 @@ public class FailuresHandler implements HttpHandler {
         map.put("classification", c.classification);
         map.put("reasoning", c.reasoning);
         map.put("suggestion", c.suggestion);
+        map.put("confidence", c.confidence);
+        map.put("selfCheckFlag", c.selfCheckFlag);
+        map.put("failingLocator", c.failingLocator);
         map.put("verified", c.verified);
         map.put("verifiedClassification", c.verifiedClassification);
         map.put("similarCases", c.similarCases);

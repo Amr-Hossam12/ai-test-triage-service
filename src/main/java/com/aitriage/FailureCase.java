@@ -18,6 +18,9 @@ public class FailureCase {
     public String classification;
     public String reasoning;
     public String suggestion;
+    public String confidence;
+    public String selfCheckFlag;
+    public String failingLocator;
     public boolean verified;
     public String verifiedClassification;
     public List<SimilarCaseRef> similarCases;

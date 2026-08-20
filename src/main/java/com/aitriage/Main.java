@@ -2,13 +2,17 @@ package com.aitriage;
 
 import com.aitriage.handlers.DashboardHandler;
 import com.aitriage.handlers.FailuresHandler;
+import com.aitriage.handlers.FlakyTestHandler;
+import com.aitriage.handlers.LocatorHealthHandler;
 import com.aitriage.handlers.MetricsHandler;
 import com.aitriage.handlers.ScreenshotHandler;
+import com.aitriage.handlers.TrendHandler;
 import com.aitriage.handlers.TriageHandler;
 import com.aitriage.notify.CompositeNotifier;
 import com.aitriage.notify.LoggingNotifier;
 import com.aitriage.notify.Notifier;
 import com.aitriage.notify.SlackWebhookNotifier;
+import com.aitriage.notify.TeamsWebhookNotifier;
 import com.sun.net.httpserver.HttpServer;
 
 import java.net.InetSocketAddress;
@@ -30,6 +34,8 @@ public class Main {
         String chatModel = System.getProperty("triage.chatModel", "llama3.1:8b");
 
         String slackWebhookUrl = System.getProperty("triage.slackWebhookUrl", "");
+        String teamsWebhookUrl = System.getProperty("triage.teamsWebhookUrl", "");
+        String dashboardBaseUrl = System.getProperty("triage.dashboardBaseUrl", "http://localhost:" + port);
 
         OllamaClient ollama = new OllamaClient(ollamaBaseUrl, embedModel, chatModel);
         FailureCaseStore store = new FailureCaseStore(dataDir);
@@ -37,7 +43,10 @@ public class Main {
         List<Notifier> notifiers = new ArrayList<>();
         notifiers.add(new LoggingNotifier());
         if (!slackWebhookUrl.isBlank()) {
-            notifiers.add(new SlackWebhookNotifier(slackWebhookUrl));
+            notifiers.add(new SlackWebhookNotifier(slackWebhookUrl, dashboardBaseUrl));
+        }
+        if (!teamsWebhookUrl.isBlank()) {
+            notifiers.add(new TeamsWebhookNotifier(teamsWebhookUrl, dashboardBaseUrl));
         }
         TriageService triageService = new TriageService(ollama, store, new CompositeNotifier(notifiers));
 
@@ -45,6 +54,9 @@ public class Main {
         server.createContext("/api/triage", new TriageHandler(triageService));
         server.createContext("/api/failures", new FailuresHandler(store));
         server.createContext("/api/metrics", new MetricsHandler(store));
+        server.createContext("/api/locator-health", new LocatorHealthHandler(store));
+        server.createContext("/api/flaky-tests", new FlakyTestHandler(store));
+        server.createContext("/api/trend", new TrendHandler(store));
         server.createContext("/api/screenshots/", new ScreenshotHandler(store));
         server.createContext("/", new DashboardHandler());
         server.setExecutor(java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
@@ -55,7 +67,8 @@ public class Main {
         System.out.println("  API:       http://localhost:" + port + "/api/triage (POST)");
         System.out.println("  Data dir:  " + dataDir);
         System.out.println("  Ollama:    " + ollamaBaseUrl + " (embed=" + embedModel + ", chat=" + chatModel + ")");
-        System.out.println("  Notifiers: logging" + (slackWebhookUrl.isBlank() ? "" : ", slack-webhook"));
+        System.out.println("  Notifiers: logging" + (slackWebhookUrl.isBlank() ? "" : ", slack-webhook")
+                + (teamsWebhookUrl.isBlank() ? "" : ", teams-webhook"));
 
         checkOllamaReachable(ollamaBaseUrl);
     }

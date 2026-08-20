@@ -89,6 +89,11 @@
   .badge-LOCATOR_BROKEN { background: #fde8e8; color: #c81e1e; }
   .badge-UNKNOWN { background: #f1f2f4; color: #6b7280; }
 
+  .badge-conf { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+  .badge-conf-HIGH { background: #e6f7ec; color: #1a7f4b; }
+  .badge-conf-MEDIUM { background: #fff4e5; color: #b45309; }
+  .badge-conf-LOW { background: #fde8e8; color: #c81e1e; }
+
   .muted { color: var(--muted); }
   #detail { padding: 20px; max-height: 680px; overflow-y: auto; }
   #detail h2 { font-size: 16px; margin: 0 0 4px; }
@@ -99,6 +104,9 @@
   .empty { padding: 60px 20px; text-align: center; color: var(--muted); }
 
   .verified-check { color: #1a7f4b; font-weight: 700; margin-left: 6px; }
+  .selfcheck-flag { color: #c81e1e; font-weight: 700; margin-left: 6px; }
+  .flaky-icon { color: #b45309; font-weight: 700; margin-left: 6px; }
+  .selfcheck-callout { display: flex; gap: 8px; align-items: flex-start; background: #fde8e8; border: 1px solid #f3c1c1; border-radius: 8px; padding: 10px 12px; font-size: 12px; color: #8a1414; margin-bottom: 10px; }
   .verified-badge { display: inline-flex; align-items: center; gap: 6px; background: #e6f7ec; color: #1a7f4b; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; margin-bottom: 10px; }
   .verify-hint { margin: 0 0 8px; }
   .verify-row { display: flex; gap: 8px; align-items: center; }
@@ -128,6 +136,32 @@
   .accuracy-bar-track { flex: 1; background: #f1f2f4; border-radius: 999px; height: 6px; overflow: hidden; }
   .accuracy-bar-fill { height: 100%; border-radius: 999px; }
   .metrics-empty { padding: 16px 18px; color: var(--muted); font-size: 13px; }
+
+  /* Locator health panel */
+  #locatorHealthPanel { margin-bottom: 20px; }
+  .locator-health-table { width: 100%; border-collapse: collapse; }
+  .locator-health-table th { text-align: left; padding: 8px 18px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); border-bottom: 1px solid var(--border); }
+  .locator-health-table td { padding: 10px 18px; font-size: 13px; border-bottom: 1px solid var(--border); }
+  .occurrence-count { display: inline-block; min-width: 22px; text-align: center; background: #fde8e8; color: #c81e1e; border-radius: 999px; padding: 2px 8px; font-weight: 700; font-size: 12px; }
+  .locator-code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; background: #f9fafb; border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px; }
+
+  /* Flaky tests panel */
+  #flakyTestsPanel { margin-bottom: 20px; }
+  .flaky-table { width: 100%; border-collapse: collapse; }
+  .flaky-table th { text-align: left; padding: 8px 18px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); border-bottom: 1px solid var(--border); }
+  .flaky-table td { padding: 10px 18px; font-size: 13px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .flaky-mix { display: flex; flex-wrap: wrap; gap: 4px; }
+
+  /* Trend panel */
+  #trendPanel { margin-bottom: 20px; }
+  #trendBody { padding: 16px 18px; overflow-x: auto; }
+  .trend-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 14px; font-size: 12px; }
+  .trend-legend-item { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  .trend-legend-swatch { width: 10px; height: 10px; border-radius: 2px; }
+  .trend-bar-col { display: inline-flex; flex-direction: column-reverse; align-items: center; gap: 2px; }
+  .trend-bar-seg { width: 32px; border-radius: 2px; }
+  .trend-bar-label { font-size: 11px; color: var(--muted); margin-top: 6px; white-space: nowrap; }
+  .trend-bar-total { font-size: 11px; font-weight: 700; margin-bottom: 4px; }
 </style>
 </head>
 <body>
@@ -161,11 +195,26 @@
         <div id="metricsBody"></div>
       </div>
 
+      <div class="panel" id="locatorHealthPanel">
+        <div class="panel-header">Locator Health (recurring broken locators)</div>
+        <div id="locatorHealthBody"></div>
+      </div>
+
+      <div class="panel" id="flakyTestsPanel">
+        <div class="panel-header">Flaky Tests (same test, different failure each time)</div>
+        <div id="flakyTestsBody"></div>
+      </div>
+
+      <div class="panel" id="trendPanel">
+        <div class="panel-header">Failures Over Time</div>
+        <div id="trendBody"></div>
+      </div>
+
       <div id="panels">
         <div class="panel">
           <div class="panel-header">Recent Failures</div>
           <div id="list-body">
-            <table><thead><tr><th>Time</th><th>Project</th><th>Test</th><th>Classification</th></tr></thead><tbody id="tbody"></tbody></table>
+            <table><thead><tr><th>Time</th><th>Project</th><th>Test</th><th>Classification</th><th>Confidence</th></tr></thead><tbody id="tbody"></tbody></table>
           </div>
         </div>
         <div class="panel">
@@ -193,11 +242,18 @@ const CATEGORY_LABELS = {
   ASSERTION_MISMATCH: "Assertion Mismatch",
   UNKNOWN: "Unknown"
 };
+const CONFIDENCE_RANK = { LOW: 0, MEDIUM: 1, HIGH: 2 };
 
 let cases = [];
 let selectedId = null;
 let classificationFilter = null;
 let queueMode = false;
+let flakyTestKeys = new Set();
+let deepLinkHandled = false;
+
+function flakyKey(projectId, testName) {
+  return projectId + ' ' + testName;
+}
 
 let currentProjectId = '';
 
@@ -212,6 +268,17 @@ async function load() {
   renderStatNav();
   renderList();
   loadMetrics();
+  loadLocatorHealth();
+  loadFlakyTests();
+  loadTrend();
+
+  if (!deepLinkHandled) {
+    deepLinkHandled = true;
+    const deepLinkId = new URLSearchParams(window.location.search).get('case');
+    if (deepLinkId) {
+      viewReferenceCase(deepLinkId);
+    }
+  }
 }
 
 function renderQueueNav() {
@@ -290,6 +357,113 @@ function renderMetrics(m) {
     </table>`;
 }
 
+async function loadLocatorHealth() {
+  const url = '/api/locator-health' + (currentProjectId ? ('?projectId=' + encodeURIComponent(currentProjectId)) : '');
+  const res = await fetch(url);
+  const groups = await res.json();
+  renderLocatorHealth(groups);
+}
+
+function renderLocatorHealth(groups) {
+  const recurring = groups.filter(g => g.occurrences >= 2);
+  const body = document.getElementById('locatorHealthBody');
+  if (recurring.length === 0) {
+    body.innerHTML = '<div class="metrics-empty">No locator has broken more than once yet - nothing recurring to flag.</div>';
+    return;
+  }
+  body.innerHTML = `
+    <table class="locator-health-table">
+      <thead><tr><th>Project</th><th>Test</th><th>Locator</th><th>Occurrences</th><th>Last seen</th></tr></thead>
+      <tbody>
+        ${recurring.map(g => `
+          <tr class="locator-health-row" data-case-id="${g.lastCaseId}">
+            <td>${escapeHtml(g.projectId)}</td>
+            <td>${escapeHtml(g.testName)}</td>
+            <td><span class="locator-code">${escapeHtml(g.failingLocator)}</span></td>
+            <td><span class="occurrence-count">${g.occurrences}</span></td>
+            <td class="muted">${new Date(g.lastSeen).toLocaleString()}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+  body.querySelectorAll('.locator-health-row').forEach(row => {
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', () => viewReferenceCase(row.dataset.caseId));
+  });
+}
+
+async function loadFlakyTests() {
+  const url = '/api/flaky-tests' + (currentProjectId ? ('?projectId=' + encodeURIComponent(currentProjectId)) : '');
+  const res = await fetch(url);
+  const groups = await res.json();
+  flakyTestKeys = new Set(groups.map(g => flakyKey(g.projectId, g.testName)));
+  renderFlakyTests(groups);
+  renderList();
+  if (selectedId) selectCase(selectedId);
+}
+
+function renderFlakyTests(groups) {
+  const body = document.getElementById('flakyTestsBody');
+  if (groups.length === 0) {
+    body.innerHTML = '<div class="metrics-empty">No test has failed with different classifications across runs yet.</div>';
+    return;
+  }
+  body.innerHTML = `
+    <table class="flaky-table">
+      <thead><tr><th>Project</th><th>Test</th><th>Failure Mix</th><th>Runs</th><th>Last seen</th></tr></thead>
+      <tbody>
+        ${groups.map(g => `
+          <tr class="flaky-row" data-case-id="${g.lastCaseId}" style="cursor:pointer;">
+            <td>${escapeHtml(g.projectId)}</td>
+            <td>${escapeHtml(g.testName)}</td>
+            <td><div class="flaky-mix">${Object.entries(g.classificationCounts).map(([cat, count]) =>
+              `<span class="badge badge-${cat}">${CATEGORY_LABELS[cat] || cat} &times;${count}</span>`).join('')}</div></td>
+            <td>${g.occurrences}</td>
+            <td class="muted">${new Date(g.lastSeen).toLocaleString()}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+  body.querySelectorAll('.flaky-row').forEach(row => {
+    row.addEventListener('click', () => viewReferenceCase(row.dataset.caseId));
+  });
+}
+
+async function loadTrend() {
+  const url = '/api/trend' + (currentProjectId ? ('?projectId=' + encodeURIComponent(currentProjectId)) : '');
+  const res = await fetch(url);
+  const days = await res.json();
+  renderTrend(days);
+}
+
+function renderTrend(days) {
+  const body = document.getElementById('trendBody');
+  if (days.length === 0) {
+    body.innerHTML = '<div class="metrics-empty">No failures recorded yet.</div>';
+    return;
+  }
+
+  const legend = `<div class="trend-legend">${CATEGORIES.map(cat => `
+    <div class="trend-legend-item"><span class="trend-legend-swatch" style="background:${CATEGORY_COLORS[cat]};"></span>${CATEGORY_LABELS[cat]}</div>`).join('')}</div>`;
+
+  const maxTotal = Math.max(1, ...days.map(d => d.total));
+  const maxBarHeight = 160;
+
+  const columnsHtml = days.map(d => {
+    const dateLabel = new Date(d.date + 'T00:00:00Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const segs = CATEGORIES.filter(cat => d.counts[cat] > 0).map(cat => {
+      const h = Math.max(3, Math.round((d.counts[cat] / maxTotal) * maxBarHeight));
+      return `<div class="trend-bar-seg" style="height:${h}px; background:${CATEGORY_COLORS[cat]};" title="${CATEGORY_LABELS[cat]}: ${d.counts[cat]}"></div>`;
+    }).join('');
+    return `
+      <div style="display:flex; flex-direction:column; align-items:center;">
+        <div class="trend-bar-total">${d.total}</div>
+        <div class="trend-bar-col" style="min-height:${maxBarHeight}px;">${segs}</div>
+        <div class="trend-bar-label">${dateLabel}</div>
+      </div>`;
+  }).join('');
+
+  body.innerHTML = legend + `<div style="display:flex; gap:18px; align-items:flex-end;">${columnsHtml}</div>`;
+}
+
 function renderProjectMenu() {
   const projects = [...new Set(cases.map(c => c.projectId))];
   const options = [{ id: '', label: 'All projects' }, ...projects.map(p => ({ id: p, label: p }))];
@@ -323,12 +497,17 @@ function renderList() {
   if (queueMode) {
     visible = visible.filter(c => !c.verified)
       .slice()
-      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      .sort((a, b) => {
+        const rankA = CONFIDENCE_RANK[a.confidence] ?? 1;
+        const rankB = CONFIDENCE_RANK[b.confidence] ?? 1;
+        if (rankA !== rankB) return rankA - rankB;
+        return new Date(a.timestamp) - new Date(b.timestamp);
+      });
   }
 
   const header = document.querySelector('#panels .panel:first-child .panel-header');
   const parts = [];
-  if (queueMode) parts.push('Review Queue (oldest unverified first)');
+  if (queueMode) parts.push('Review Queue (lowest confidence first)');
   if (classificationFilter) parts.push(CATEGORY_LABELS[classificationFilter]);
   header.textContent = parts.length ? `Recent Failures — ${parts.join(' — ')}` : 'Recent Failures';
 
@@ -341,14 +520,15 @@ function renderList() {
   }
 
   document.getElementById('list-body').innerHTML =
-    '<table><thead><tr><th>Time</th><th>Project</th><th>Test</th><th>Classification</th></tr></thead><tbody id="tbody"></tbody></table>';
+    '<table><thead><tr><th>Time</th><th>Project</th><th>Test</th><th>Classification</th><th>Confidence</th></tr></thead><tbody id="tbody"></tbody></table>';
   const tbody = document.getElementById('tbody');
   tbody.innerHTML = visible.map(c => `
     <tr data-id="${c.id}" class="${c.id === selectedId ? 'selected' : ''}">
       <td class="muted">${new Date(c.timestamp).toLocaleString()}</td>
       <td>${escapeHtml(c.projectId)}</td>
       <td>${escapeHtml(c.testName)}</td>
-      <td><span class="badge badge-${c.classification}">${c.classification}</span>${c.verified ? '<span class="verified-check" title="Human verified">&#10003;</span>' : ''}</td>
+      <td><span class="badge badge-${c.classification}">${c.classification}</span>${c.verified ? '<span class="verified-check" title="Human verified">&#10003;</span>' : ''}${c.selfCheckFlag ? '<span class="selfcheck-flag" title="Self-check disagreement - a second pass proposed a different category">&#9888;</span>' : ''}${flakyTestKeys.has(flakyKey(c.projectId, c.testName)) ? '<span class="flaky-icon" title="Flaky test - has failed with different classifications across runs">&#9889;</span>' : ''}</td>
+      <td>${c.confidence ? `<span class="badge-conf badge-conf-${c.confidence}">${c.confidence}</span>` : '<span class="muted">&mdash;</span>'}</td>
     </tr>`).join('');
 
   tbody.querySelectorAll('tr').forEach(tr => {
@@ -405,13 +585,16 @@ function selectCase(id) {
   const detail = document.getElementById('detail');
   if (!c) { detail.innerHTML = '<div class="empty">Not found</div>'; return; }
 
+  const isFlaky = flakyTestKeys.has(flakyKey(c.projectId, c.testName));
   detail.innerHTML = `
-    <h2>${escapeHtml(c.testName)}</h2>
+    <h2>${escapeHtml(c.testName)}${isFlaky ? '<span class="flaky-icon" title="Flaky test - has failed with different classifications across runs">&#9889;</span>' : ''}</h2>
     <p class="muted">${escapeHtml(c.projectId)} &middot; ${new Date(c.timestamp).toLocaleString()}</p>
     <div class="section">
       <h3>Classification</h3>
       <span class="badge badge-${c.classification}">${c.classification}</span>
+      ${c.confidence ? `<span class="badge-conf badge-conf-${c.confidence}" style="margin-left:8px;" title="How sure the model was, given the evidence it had">${c.confidence} confidence</span>` : ''}
     </div>
+    ${c.selfCheckFlag ? `<div class="selfcheck-callout">&#9888;&#65039; ${escapeHtml(c.selfCheckFlag)}</div>` : ''}
     <div class="section">
       <h3>Human Verification</h3>
       ${c.verified ? `<div class="verified-badge">&#10003; Verified as ${CATEGORY_LABELS[c.verifiedClassification] || c.verifiedClassification}</div>` : ''}
@@ -426,6 +609,7 @@ function selectCase(id) {
     <div class="section">
       <h3>Exception</h3>
       <pre>${escapeHtml(c.exceptionType)}: ${escapeHtml(c.exceptionMessage)}</pre>
+      ${c.failingLocator ? `<p class="muted" style="margin:8px 0 0;">Failing locator: <code>${escapeHtml(c.failingLocator)}</code></p>` : ''}
     </div>
     <div class="section">
       <h3>Reasoning</h3>
